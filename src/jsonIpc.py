@@ -20,6 +20,7 @@ class JsonIpc(threading.Thread):
       line = self.stdin.readline()
 
       if len(line) == 0:
+        logging.info("EOF")
         self.running = False
         break
 
@@ -28,6 +29,9 @@ class JsonIpc(threading.Thread):
         self.eventHandler(jsonValue, self)
       except ValueError as e:
         logging.error("coulnd't parse object: %s", e)
+
+    logging.info("input stream closed")
+
 
   def send(self, obj):
     json_value = json.dumps(obj)

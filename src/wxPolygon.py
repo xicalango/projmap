@@ -63,12 +63,10 @@ class Transformation():
 
   def logicToScreen(self, point):
     sp = self.__transform(point, self.transformationMatrix)
-    logging.debug("%s -l2s> %s", point, sp)
     return sp
 
   def screenToLogic(self, point):
     lp = self.__transform(point, self.transformationMatrixReverse)
-    logging.debug("%s -s2l> %s", point, lp)
     return lp
     
 
@@ -88,23 +86,31 @@ class Rectangle():
     ]
 
 class RectangleShape():
-  def __init__(self, rect, color = "Red"):
+  def __init__(self, rect, color = "white"):
     self.rect = rect
     self.set_color(color)
 
   def set_color(self, color):
     self.pen = wx.Pen(wx.NamedColour(color), 1, wx.SOLID)
+    self.brush = wx.Brush(wx.NamedColour(color))
 
   def draw(self, dc, transformation):
     points = map( lambda p: wx.Point(int(p[0]), int(p[1])), map( lambda p: transformation.logicToScreen(p), self.rect.get_points() ))
 
+    oldPen = dc.GetPen()
+    oldBrush = dc.GetBrush()
+
     dc.SetPen( self.pen )
+    dc.SetBrush( self.brush )
 
     dc.DrawPolygon( points )
 
     unmapped_points = map( lambda p: wx.Point(int(p[0]*10), int(p[1]*10)), self.rect.get_points() )
 
     dc.DrawPolygon( unmapped_points )
+
+    dc.SetPen( oldPen )
+    dc.SetBrush( oldBrush )
     
 
 class ProjMapWindow(wx.Window):
@@ -122,7 +128,7 @@ class ProjMapWindow(wx.Window):
         self.initBuffer()
 
     def initDrawing(self):
-        self.SetBackgroundColour('BLACK')
+        self.SetBackgroundColour('WHITE')
         self.markers = []
         self.rects = []
 
@@ -173,8 +179,24 @@ class ProjMapWindow(wx.Window):
         self.ipc_add_rects(data)
       elif op == "ClearRects":
         self.ipc_clear_rects()
+      elif op == "SetMode":
+        self.ipc_set_mode(data)
+      elif op == "SetRectColor":
+        self.ipc_set_rect_color(data)
       else:
         logging.error("unknown op: %s", op)
+
+    def ipc_set_rect_color(self, data):
+      rect_id = data["id"]
+      rect = self.rects[rect_id]
+      rect.set_color(data["color"])
+      self.redraw()
+
+    def ipc_set_mode(self, data):
+      if data["mode"] == "calibrate":
+        self.set_mode(ProjMapWindow.MODE_CALIBRATE)
+      elif data["mode"] == "draw":
+        self.set_mode(ProjMapWindow.MODE_DRAW)
 
     def ipc_clear_rects(self):
       self.rects = []
@@ -252,7 +274,6 @@ class ProjMapWindow(wx.Window):
       srcPoints = [ (0,0), (self.initSize[0], 0), (self.initSize[0], self.initSize[1]), (0, self.initSize[1]) ]
       transformation = Transformation.createTransformation(self.markers, srcPoints)
       self.set_transformation(transformation)
-      self.clearScreen = True
 
     def set_transformation(self, transformation):
       assert self.mode == ProjMapWindow.MODE_CALIBRATE, self.mode
@@ -265,8 +286,14 @@ class ProjMapWindow(wx.Window):
 
       self.mode = mode
 
+      self.clearScreen = True
       if mode == ProjMapWindow.MODE_CALIBRATE:
         self.markers = []
+        self.SetBackgroundColour("WHITE")
+      elif mode == ProjMapWindow.MODE_DRAW:
+        self.SetBackgroundColour("BLACK")
+
+      self.redraw()
 
     def onSize(self, event):
         ''' Called when the window is resized. We set a flag so the idle
